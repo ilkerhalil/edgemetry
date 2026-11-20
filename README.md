@@ -177,3 +177,5 @@ is present.
 - `docs/deployment.md` — systemd unit, PostgreSQL setup, collector wiring, capacity notes
 - `CONTRIBUTING.md` — setup, checks, conventions
 - `CHANGELOG.md` — release history
+- `docs/article-why-span-level-tr.md` — Turkish write-up: why callee-level latency is missing, and what the measurements showed
+- `docs/announcement-en.md` — short English launch note
