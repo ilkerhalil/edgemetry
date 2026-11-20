@@ -2,13 +2,25 @@
 
 Base URL in the examples: `http://127.0.0.1:4318`.
 
+## Authentication
+
+When the server runs with `EDGEMETRY_TOKEN` set, every endpoint except `/health` requires:
+
+```
+Authorization: Bearer <token>
+```
+
+Missing or wrong credentials return `401` with `WWW-Authenticate: Bearer realm="edgemetry"`.
+Comparison is constant-time. Without a token the receiver accepts unauthenticated traffic and prints
+`auth=NO AUTH` on startup.
+
 ## `POST /v1/traces`
 
 Accepts an OTLP export request. The decoder is chosen by `Content-Type`:
 
 | Content-Type | Decoder |
 |---|---|
-| `application/x-protobuf` | official OTLP generated classes (`spanlens[otlp]`) |
+| `application/x-protobuf` | official OTLP generated classes (`edgemetry[otlp]`) |
 | `application/protobuf`, `application/octet-stream` | same |
 | anything else | OTLP/JSON |
 
@@ -28,6 +40,8 @@ Errors:
 | 400 | body is not valid for the declared encoding |
 | 404 | path is not an ingest endpoint |
 | 415 | protobuf body received but `opentelemetry-proto` is not installed |
+| 401 | missing or wrong bearer token |
+| 503 | the store failed while writing the batch |
 
 ## `GET /v1/edges`
 
@@ -101,15 +115,16 @@ Full waterfall for one trace, with `self_ns` computed per span.
 ## `GET /health`
 
 ```json
-{"status": "ok"}
+{"status": "ok", "store": "ok"}
 ```
 
-Used by the deployment health check; it does not touch the store.
+Returns `503` with `{"status": "degraded", "store": "down"}` when the store stops answering, so a load
+balancer takes the node out instead of sending it traffic. Always public, never requires the token.
 
 ## CLI equivalent
 
 ```bash
-spanlens query --since 3600 --service gateway
-spanlens trace 00d6d13c99894ec7a2b07f156819a6d5
-spanlens verify --since 3600
+edgemetry query --since 3600 --service gateway
+edgemetry trace 00d6d13c99894ec7a2b07f156819a6d5
+edgemetry verify --since 3600
 ```

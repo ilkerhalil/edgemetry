@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from spanlens.store import percentile
+from edgemetry.store import percentile
 
 
 def test_empty_returns_zero() -> None:

@@ -7,9 +7,9 @@ from collections.abc import Callable, Iterator
 
 import pytest
 
-from spanlens.api import make_server
-from spanlens.model import Span
-from spanlens.store import Store
+from edgemetry.api import make_server
+from edgemetry.model import Span
+from edgemetry.store import Store
 
 
 @pytest.fixture

@@ -3,8 +3,8 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "spanlens"
-version = "0.2.0"
+name = "edgemetry"
+version = "0.3.0"
 description = "Span-level latency store for OpenTelemetry traces"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -37,17 +37,17 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ilkerhalil/spanlens"
-Issues = "https://github.com/ilkerhalil/spanlens/issues"
+Homepage = "https://github.com/ilkerhalil/edgemetry"
+Issues = "https://github.com/ilkerhalil/edgemetry/issues"
 
 [project.scripts]
-spanlens = "spanlens.cli:main"
+edgemetry = "edgemetry.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-spanlens = ["py.typed"]
+edgemetry = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -56,8 +56,8 @@ addopts = "-ra --strict-markers"
 markers = ["integration: needs a live service"]
 
 [tool.coverage.run]
-source = ["spanlens"]
-omit = ["*/spanlens/__main__.py"]
+source = ["edgemetry"]
+omit = ["*/edgemetry/__main__.py"]
 
 [tool.coverage.report]
 skip_empty = true

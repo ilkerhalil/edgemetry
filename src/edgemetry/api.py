@@ -7,6 +7,7 @@ dependency tree to keep patched.
 
 from __future__ import annotations
 
+import hmac
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -16,27 +17,50 @@ from .model import parse_otlp_json
 from .otlp_proto import parse_otlp_protobuf, protobuf_available
 
 PROTOBUF_TYPES = ("application/x-protobuf", "application/protobuf", "application/octet-stream")
+PUBLIC_PATHS = ("/health",)
 
 
 class Handler(BaseHTTPRequestHandler):
-    """Request handler bound to a store instance by :func:`make_server`."""
+    """Request handler bound to a store and an optional shared token."""
 
     store: Any
+    token: str | None = None
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         """Silence per-request logging; the collector already logs the exporter side."""
 
-    def _send(self, code: int, payload: dict[str, Any]) -> None:
+    def _send(
+        self, code: int, payload: dict[str, Any], extra: dict[str, str] | None = None
+    ) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        for key, value in (extra or {}).items():
+            self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
 
+    def _authorised(self) -> bool:
+        """Bearer check. No token configured means the deployment relies on the network."""
+        if not self.token:
+            return True
+        scheme, _, value = (self.headers.get("Authorization") or "").partition(" ")
+        if scheme.lower() != "bearer":
+            return False
+        return hmac.compare_digest(value.strip(), self.token)
+
+    def _reject_unauthorised(self, path: str) -> bool:
+        if path in PUBLIC_PATHS or self._authorised():
+            return False
+        self._send(401, {"error": "unauthorized"}, {"WWW-Authenticate": 'Bearer realm="edgemetry"'})
+        return True
+
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if self._reject_unauthorised(path):
+            return
         if path not in ("/v1/traces", "/ingest/spans"):
             self._send(404, {"error": "not found"})
             return
@@ -48,7 +72,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not protobuf_available():
                     self._send(
                         415,
-                        {"error": "protobuf ingest unavailable: pip install spanlens[otlp]"},
+                        {"error": "protobuf ingest unavailable: pip install edgemetry[otlp]"},
                     )
                     return
                 spans = parse_otlp_protobuf(body)
@@ -61,14 +85,25 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": f"decode failed: {exc}"})
             return
 
-        self._send(200, {"accepted": self.store.insert(spans)})
+        try:
+            accepted = self.store.insert(spans)
+        except Exception as exc:
+            self._send(503, {"error": f"store unavailable: {type(exc).__name__}"})
+            return
+        self._send(200, {"accepted": accepted})
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if self._reject_unauthorised(parsed.path):
+            return
         query = parse_qs(parsed.query)
 
         if parsed.path == "/health":
-            self._send(200, {"status": "ok"})
+            healthy = self.store.ping()
+            self._send(
+                200 if healthy else 503,
+                {"status": "ok" if healthy else "degraded", "store": "ok" if healthy else "down"},
+            )
             return
 
         if parsed.path == "/v1/edges":
@@ -98,15 +133,28 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, {"error": "not found"})
 
 
-def make_server(store: Any, host: str = "127.0.0.1", port: int = 4318) -> ThreadingHTTPServer:
+def make_server(
+    store: Any,
+    host: str = "127.0.0.1",
+    port: int = 4318,
+    token: str | None = None,
+) -> ThreadingHTTPServer:
     """Build a server without starting it — integration tests bind port 0."""
-    handler = type("BoundHandler", (Handler,), {"store": store})
+    handler = type("BoundHandler", (Handler,), {"store": store, "token": token})
     return ThreadingHTTPServer((host, port), handler)
 
 
-def serve(store: Any, host: str = "127.0.0.1", port: int = 4318) -> None:
-    server = make_server(store, host, port)
-    print(f"spanlens listening on http://{host}:{port}  store={type(store).__name__}")
+def serve(
+    store: Any,
+    host: str = "127.0.0.1",
+    port: int = 4318,
+    token: str | None = None,
+) -> None:
+    server = make_server(store, host, port, token)
+    guard = "bearer token" if token else "NO AUTH"
+    print(
+        f"edgemetry listening on http://{host}:{port}  store={type(store).__name__}  auth={guard}"
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

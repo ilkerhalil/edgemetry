@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from spanlens.model import parse_otlp_json
+from edgemetry.model import parse_otlp_json
 
 PAYLOAD = {
     "resourceSpans": [

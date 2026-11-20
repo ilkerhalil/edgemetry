@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from spanlens.model import build_tree, pick_peer
+from edgemetry.model import build_tree, pick_peer
 
 
 def test_duration_is_end_minus_start() -> None:
-    from spanlens.model import Span
+    from edgemetry.model import Span
 
     span = Span(
         trace_id="t",
@@ -25,7 +25,7 @@ def test_duration_is_end_minus_start() -> None:
 
 
 def test_peer_prefers_normalised_attribute() -> None:
-    attrs = {"spanlens.peer": "canonical", "server.address": "raw"}
+    attrs = {"edgemetry.peer": "canonical", "server.address": "raw"}
     assert pick_peer(attrs) == "canonical"
 
 

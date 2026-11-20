@@ -1,6 +1,6 @@
 """Span model and OTLP/JSON parsing.
 
-OTLP numbers arrive as strings of epoch nanoseconds. Everything inside SpanLens is
+OTLP numbers arrive as strings of epoch nanoseconds. Everything inside Edgemetry is
 nanoseconds; conversion to milliseconds happens only at the reporting edge.
 """
 
@@ -22,7 +22,7 @@ STATUS = {0: "unset", 1: "ok", 2: "error"}
 
 # Attribute keys that identify the callee of a client span, in priority order.
 PEER_KEYS = (
-    "spanlens.peer",
+    "edgemetry.peer",
     "server.address",
     "peer.service",
     "net.peer.name",

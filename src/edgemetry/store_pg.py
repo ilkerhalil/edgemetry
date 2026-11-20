@@ -126,6 +126,26 @@ class PostgresStore:
                 rows.append(item)
             return rows
 
+    def ping(self) -> bool:
+        try:
+            self.conn.execute("SELECT 1")
+            return True
+        except psycopg.Error:
+            return False
+
+    def prune(self, older_than_s: int) -> int:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM spans WHERE start_ns < %s",
+                (int((time.time() - older_than_s) * 1e9),),
+            )
+            return cur.rowcount or 0
+
+    def count(self) -> int:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM spans")
+            return cur.fetchone()[0]
+
     def peer_coverage(self, since_s: int = 3600) -> list[dict[str, Any]]:
         with self.conn.cursor() as cur:
             cur.execute(

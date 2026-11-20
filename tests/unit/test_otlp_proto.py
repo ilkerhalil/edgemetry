@@ -10,7 +10,7 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
     ExportTraceServiceRequest,
 )
 
-from spanlens.otlp_proto import parse_otlp_protobuf, protobuf_available
+from edgemetry.otlp_proto import parse_otlp_protobuf, protobuf_available
 
 
 def build_request() -> ExportTraceServiceRequest:

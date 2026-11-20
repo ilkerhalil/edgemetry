@@ -1,8 +1,8 @@
-# OpenTelemetry Collector — Dynatrace stays primary, SpanLens is the second line.
+# OpenTelemetry Collector — Dynatrace stays primary, Edgemetry is the second line.
 #
 # Problem this solves: Dynatrace Managed can tell you a service is slow, but its
 # classic UI cannot aggregate spans by callee address. This config exports every
-# span twice — once to Dynatrace exactly as before, once to SpanLens, which keeps
+# span twice — once to Dynatrace exactly as before, once to Edgemetry, which keeps
 # the peer attributes and answers "the call to payments.internal:8443 is 900 ms
 # at p95".
 #
@@ -28,9 +28,9 @@ processors:
     trace_statements:
       - context: span
         statements:
-          - set(attributes["spanlens.peer"], attributes["server.address"]) where attributes["server.address"] != nil
-          - set(attributes["spanlens.peer"], attributes["peer.service"]) where attributes["spanlens.peer"] == nil and attributes["peer.service"] != nil
-          - set(attributes["spanlens.peer"], attributes["net.peer.name"]) where attributes["spanlens.peer"] == nil and attributes["net.peer.name"] != nil
+          - set(attributes["edgemetry.peer"], attributes["server.address"]) where attributes["server.address"] != nil
+          - set(attributes["edgemetry.peer"], attributes["peer.service"]) where attributes["edgemetry.peer"] == nil and attributes["peer.service"] != nil
+          - set(attributes["edgemetry.peer"], attributes["net.peer.name"]) where attributes["edgemetry.peer"] == nil and attributes["net.peer.name"] != nil
 
   # Client spans only need their timing and target downstream; drop the payload.
   attributes/strip:
@@ -47,14 +47,16 @@ exporters:
     headers:
       Authorization: "Api-Token ${env:DT_API_TOKEN}"
 
-  # SpanLens accepts native protobuf; no JSON encoder needed.
-  otlphttp/spanlens:
-    traces_endpoint: ${env:SPANLENS_ENDPOINT}
+  # Edgemetry accepts native protobuf; no JSON encoder needed.
+  otlphttp/edgemetry:
+    traces_endpoint: ${env:EDGEMETRY_ENDPOINT}
     encoding: proto
+    headers:
+      Authorization: "Bearer ${env:EDGEMETRY_TOKEN}"
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [transform/peer, attributes/strip, batch]
-      exporters: [otlphttp/dynatrace, otlphttp/spanlens]
+      exporters: [otlphttp/dynatrace, otlphttp/edgemetry]

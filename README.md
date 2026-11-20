@@ -1,11 +1,11 @@
-# SpanLens
+# Edgemetry
 
 Answer one question that classic APM tooling often cannot: **how long did our outbound call to a
 specific endpoint actually take, and how is that trending?**
 
-SpanLens receives OpenTelemetry spans over OTLP, stores them, and answers latency questions at the
+Edgemetry receives OpenTelemetry spans over OTLP, stores them, and answers latency questions at the
 span level — per caller service, per callee address, per operation, with p50/p95/p99 and error rate.
-It sits next to an existing APM, not instead of it: the APM keeps alerting on services, SpanLens
+It sits next to an existing APM, not instead of it: the APM keeps alerting on services, Edgemetry
 answers "the call to `payments.internal:8443` is 900 ms at p95" when the metrics-only UI cannot.
 
 ## Why
@@ -15,7 +15,7 @@ cannot tell you which remote endpoint was slow, because the peer address is unbo
 metrics backends refuse high-cardinality dimensions. Spans carry the peer, the operation and the
 timing, but many managed APM editions expose only trace-by-id lookup — no aggregation over spans.
 
-SpanLens stores the spans and runs the aggregation.
+Edgemetry stores the spans and runs the aggregation.
 
 ## Quickstart
 
@@ -24,13 +24,14 @@ python -m venv .venv
 .venv/bin/pip install -e ".[otlp,postgres]"   # drop the extras for a JSON-only, SQLite-only run
 
 # receiver + query API
-PYTHONPATH=src .venv/bin/python -m spanlens.cli serve --db spans.db --port 4318
+export EDGEMETRY_TOKEN="$(openssl rand -hex 24)"
+PYTHONPATH=src .venv/bin/python -m edgemetry.cli serve --db spans.db --port 4318 --retention 7d
 
 # in another shell: emit demo traffic with known latency
 PYTHONPATH=src .venv/bin/python demo/emit_demo.py
 
 # aggregate query
-PYTHONPATH=src .venv/bin/python -m spanlens.cli query --db spans.db --since 3600
+PYTHONPATH=src .venv/bin/python -m edgemetry.cli query --db spans.db --since 3600
 ```
 
 Output from a real run of the demo (400 calls, target sleeps 200 ms normally and 900 ms one call in
@@ -63,20 +64,20 @@ Native protobuf, no encoder flag needed:
 
 ```yaml
 exporters:
-  otlphttp/spanlens:
-    traces_endpoint: http://spanlens:4318/v1/traces
+  otlphttp/edgemetry:
+    traces_endpoint: http://edgemetry:4318/v1/traces
 ```
 
 ## Running next to Dynatrace
 
 `deploy/otel-collector-dynatrace.yaml` exports every span twice: unchanged to Dynatrace, and to
-SpanLens. Nothing in the application changes, and the Dynatrace path keeps its own sampling and
+Edgemetry. Nothing in the application changes, and the Dynatrace path keeps its own sampling and
 billing.
 
 After wiring it, check that the spans actually carry a callee:
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m spanlens.cli verify --since 3600
+PYTHONPATH=src .venv/bin/python -m edgemetry.cli verify --since 3600
 ```
 
 ```
@@ -122,10 +123,28 @@ because the CPU has no AVX2. On normal server hardware they remain the better lo
 - **Sampling changes the meaning of the answer.** If the collector samples traces, counts are a
   sample, not request totals. Report rates and percentiles, never totals.
 
-## Limits of v0.1
+## Security and retention
 
-- Single node, one process. No retention policy — the database grows forever.
-- No authentication on the receiver. Put it behind the collector's network boundary.
+Set `EDGEMETRY_TOKEN` (or pass `--token`) and every ingest and query request needs
+`Authorization: Bearer <token>`. `/health` stays public so a load balancer can probe it.
+
+```bash
+curl -H "Authorization: Bearer $EDGEMETRY_TOKEN" localhost:4318/v1/edges
+```
+
+Without a token the receiver trusts the network segment, which is fine only when the collector and
+Edgemetry share a private interface. The startup line prints `auth=NO AUTH` in that case so it is
+never a silent default.
+
+`--retention 7d` prunes on start and every six hours; `edgemetry prune --older-than 7d` does the same
+on demand, and `--dry-run` reports without deleting. `/health` returns `503` with
+`{"status":"degraded"}` when the store stops answering.
+
+## Limits
+
+- Single node, one process. No trend rollups — every query scans its window.
+- No TLS termination; put it behind a proxy or use the collector's exporter TLS.
+- Token auth is a shared secret, not per-tenant authorisation.
 - No histogram or time-series rollups yet; every query scans the window.
 - `verify` checks one attribute family; it does not validate OTLP conformance.
 
@@ -133,12 +152,13 @@ because the CPU has no AVX2. On normal server hardware they remain the better lo
 
 ```bash
 .venv/bin/python -m pytest -q                       # unit + HTTP integration
-SPANLENS_TEST_DSN=postgresql://... .venv/bin/python -m pytest -q   # adds the Postgres suite
+EDGEMETRY_TEST_DSN=postgresql://... .venv/bin/python -m pytest -q   # adds the Postgres suite
 ```
 
-49 tests, 91 % coverage: unit tests cover percentile arithmetic, OTLP decoding in both encodings,
-peer extraction, aggregation and the CLI; integration tests drive a real HTTP server and, when a DSN
-is present, a real PostgreSQL database.
+73 tests, 90 % coverage: unit tests cover percentile arithmetic, OTLP decoding in both encodings,
+peer extraction, aggregation, retention and the CLI; integration tests drive a real HTTP server with
+and without a token, check the health contract, and run against a real PostgreSQL database when a DSN
+is present.
 
 ## Documentation
 

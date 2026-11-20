@@ -15,10 +15,10 @@ python -m venv .venv
 .venv/bin/python -m pytest -q
 ```
 
-Integration tests that need a database are skipped unless `SPANLENS_TEST_DSN` is set:
+Integration tests that need a database are skipped unless `EDGEMETRY_TEST_DSN` is set:
 
 ```bash
-SPANLENS_TEST_DSN="postgresql://postgres:spanlens@localhost:5432/spanlens" \
+EDGEMETRY_TEST_DSN="postgresql://postgres:edgemetry@localhost:5432/edgemetry" \
   .venv/bin/python -m pytest tests/integration -q
 ```
 
@@ -35,7 +35,7 @@ SPANLENS_TEST_DSN="postgresql://postgres:spanlens@localhost:5432/spanlens" \
 ## Layout
 
 ```
-src/spanlens/      package
+src/edgemetry/      package
 tests/unit/        no I/O beyond a temporary SQLite file
 tests/integration/ real HTTP server, real database
 docs/              architecture, API, deployment

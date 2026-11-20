@@ -14,9 +14,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from spanlens.model import Span
-from spanlens.store import Store
-from spanlens.store_pg import PostgresStore
+from edgemetry.model import Span
+from edgemetry.store import Store
+from edgemetry.store_pg import PostgresStore
 
 N = 100_000
 PEERS = [f"svc{i}.internal:8443" for i in range(8)]
@@ -67,5 +67,5 @@ if __name__ == "__main__":
     else:
         run(
             "postgres",
-            PostgresStore("postgresql://postgres:spanlens@127.0.0.1:5434/spanlens_scale"),
+            PostgresStore("postgresql://postgres:edgemetry@127.0.0.1:5434/edgemetry_scale"),
         )

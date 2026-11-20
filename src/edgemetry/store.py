@@ -152,6 +152,24 @@ class Store:
         out.sort(key=lambda r: r["p95_ms"], reverse=True)
         return out[:limit]
 
+    def ping(self) -> bool:
+        """True when the store answers a trivial query; drives /health."""
+        try:
+            self.conn.execute("SELECT 1").fetchone()
+            return True
+        except sqlite3.Error:
+            return False
+
+    def prune(self, older_than_s: int) -> int:
+        """Delete spans older than the window. Returns rows removed."""
+        cutoff = int((time.time() - older_than_s) * 1e9)
+        cur = self.conn.execute("DELETE FROM spans WHERE start_ns < ?", (cutoff,))
+        self.conn.commit()
+        return cur.rowcount or 0
+
+    def count(self) -> int:
+        return self.conn.execute("SELECT count(*) FROM spans").fetchone()[0]
+
     def peer_coverage(self, since_s: int = 3600) -> list[dict[str, Any]]:
         """Share of client spans that carry a callee identifier.
 

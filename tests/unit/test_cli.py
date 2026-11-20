@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import time
 
-from spanlens.cli import main
-from spanlens.model import Span
-from spanlens.store import Store
+from edgemetry.cli import main
+from edgemetry.model import Span
+from edgemetry.store import Store
 
 
 def seed(db_path: str, spans: list[Span]) -> None:
@@ -77,3 +78,41 @@ def test_trace_prints_json(tmp_path, capsys) -> None:
 
     assert main(["trace", "abc", "--db", db]) == 0
     assert '"span_id": "root"' in capsys.readouterr().out
+
+
+def test_query_json_format(tmp_path, capsys) -> None:
+    db = str(tmp_path / "json.db")
+    seed(db, [span("a", 120)])
+
+    assert main(["query", "--db", db, "--since", "600", "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["edges"][0]["service"] == "gateway"
+    assert payload["edges"][0]["p50_ms"] == 120.0
+
+
+def test_prune_dry_run_deletes_nothing(tmp_path, capsys) -> None:
+    db = str(tmp_path / "dry.db")
+    seed(db, [span("old", 10, start_ns=0, end_ns=10**6)])
+
+    assert main(["prune", "--db", db, "--older-than", "1d", "--dry-run"]) == 0
+    assert "would delete" in capsys.readouterr().out
+
+    store = Store(db)
+    try:
+        assert store.count() == 1
+    finally:
+        store.close()
+
+
+def test_prune_deletes_old_spans(tmp_path, capsys) -> None:
+    db = str(tmp_path / "prune.db")
+    seed(db, [span("old", 10, start_ns=0, end_ns=10**6)])
+
+    assert main(["prune", "--db", db, "--older-than", "1h"]) == 0
+    assert "deleted" in capsys.readouterr().out
+
+    store = Store(db)
+    try:
+        assert store.count() == 0
+    finally:
+        store.close()

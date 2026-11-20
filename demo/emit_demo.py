@@ -1,4 +1,4 @@
-"""Demo: emit real spans with known latency into a running SpanLens receiver.
+"""Demo: emit real spans with known latency into a running Edgemetry receiver.
 
 Two services: a gateway calling a payment API. Half the calls are slow, one in
 twenty fails. The delays are the ground truth; the query result must match them
@@ -17,7 +17,7 @@ import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SPANLENS = os.environ.get("SPANLENS_URL", "http://127.0.0.1:4318/v1/traces")
+EDGEMETRY = os.environ.get("EDGEMETRY_URL", "http://127.0.0.1:4318/v1/traces")
 random.seed(7)
 
 
@@ -36,7 +36,7 @@ def otlp(spans: list[dict], service: str) -> dict:
                 "resource": {
                     "attributes": [{"key": "service.name", "value": {"stringValue": service}}]
                 },
-                "scopeSpans": [{"scope": {"name": "spanlens-demo"}, "spans": spans}],
+                "scopeSpans": [{"scope": {"name": "edgemetry-demo"}, "spans": spans}],
             }
         ]
     }
@@ -44,7 +44,7 @@ def otlp(spans: list[dict], service: str) -> dict:
 
 def post(payload: dict) -> None:
     req = urllib.request.Request(
-        SPANLENS,
+        EDGEMETRY,
         data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"},
     )

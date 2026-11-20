@@ -1,6 +1,6 @@
 """PostgreSQL backend, exercised against a real server.
 
-Skipped unless SPANLENS_TEST_DSN points at a reachable database. CI provides one
+Skipped unless EDGEMETRY_TEST_DSN points at a reachable database. CI provides one
 through a service container, which is why this is an integration test rather than
 a mock: the whole point of the backend is that the database computes the
 percentiles.
@@ -16,10 +16,10 @@ import pytest
 
 pytest.importorskip("psycopg")
 
-from spanlens.store_pg import PostgresStore
+from edgemetry.store_pg import PostgresStore
 
-DSN = os.environ.get("SPANLENS_TEST_DSN")
-pytestmark = pytest.mark.skipif(not DSN, reason="SPANLENS_TEST_DSN not set")
+DSN = os.environ.get("EDGEMETRY_TEST_DSN")
+pytestmark = pytest.mark.skipif(not DSN, reason="EDGEMETRY_TEST_DSN not set")
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def pg_store():
 
 
 def make(span_id: str, duration_ms: int, **overrides):
-    from spanlens.model import Span
+    from edgemetry.model import Span
 
     now = time.time_ns()
     values = {
@@ -119,3 +119,25 @@ def test_peer_coverage(pg_store) -> None:
     )
     rows = pg_store.peer_coverage(since_s=600)
     assert rows[0]["coverage_pct"] == 33.3
+
+
+def test_prune_removes_old_spans(pg_store) -> None:
+    now = time.time_ns()
+    pg_store.insert(
+        [
+            make(
+                "old",
+                10,
+                start_ns=now - 30 * 86400 * 10**9,
+                end_ns=now - 30 * 86400 * 10**9 + 10**6,
+            ),
+            make("new", 10, start_ns=now, end_ns=now + 10**6),
+        ]
+    )
+    assert pg_store.count() == 2
+    assert pg_store.prune(older_than_s=7 * 86400) == 1
+    assert pg_store.count() == 1
+
+
+def test_ping_reports_healthy(pg_store) -> None:
+    assert pg_store.ping() is True

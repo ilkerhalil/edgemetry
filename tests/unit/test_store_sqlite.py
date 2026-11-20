@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from spanlens.store import Store
+from edgemetry.store import Store
 
 NOW = 10**18
 

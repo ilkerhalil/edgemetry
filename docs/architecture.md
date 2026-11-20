@@ -1,6 +1,6 @@
 # Architecture
 
-SpanLens is a span store with a narrow purpose: keep the attributes that identify a callee, and
+Edgemetry is a span store with a narrow purpose: keep the attributes that identify a callee, and
 aggregate latency over them. Everything else — alerting, topology, service health — belongs to the
 APM that is already deployed.
 
@@ -12,7 +12,7 @@ application
    ▼
 OpenTelemetry Collector
    ├── otlphttp/dynatrace   → existing APM, unchanged
-   └── otlphttp/spanlens    → SpanLens receiver
+   └── otlphttp/edgemetry    → Edgemetry receiver
                                    │
                         ┌──────────┴──────────┐
                         │  decode (proto/json)│
@@ -25,7 +25,7 @@ OpenTelemetry Collector
                             query API / CLI
 ```
 
-The collector does the fan-out. SpanLens never sits in the request path: if it is down, applications
+The collector does the fan-out. Edgemetry never sits in the request path: if it is down, applications
 and the APM are unaffected, and the collector's own queue absorbs the gap.
 
 ## Module map
@@ -61,8 +61,14 @@ Postgres backend exists.
 anything else is treated as OTLP/JSON. A missing optional dependency answers `415` with the install
 hint instead of failing at import time, so a JSON-only deployment stays dependency-free.
 
-**No authentication in v0.1.** The receiver assumes a trusted network segment next to the collector.
-Putting a token check in front of it is a deployment concern, not a code path to invent badly.
+**A shared bearer token, or no token at all.** With `EDGEMETRY_TOKEN` set, ingest and queries need
+`Authorization: Bearer`. Without it the receiver trusts the network — and says `auth=NO AUTH` at
+startup, because a silent unauthenticated default is how receivers end up exposed. `/health` is always
+public: a probe that needs a credential cannot be used by a load balancer.
+
+**Retention is a background loop, not a database feature.** `--retention 7d` prunes at start and every
+six hours. It is deliberately coarse: a real time-series store would use partitions and TTL, which is
+what a ClickHouse backend buys.
 
 ## What is deliberately missing
 
