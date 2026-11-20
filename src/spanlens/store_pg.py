@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 import psycopg
 
@@ -65,23 +66,37 @@ class PostgresStore:
 
     def insert(self, spans: Iterable[Span]) -> int:
         rows = [
-            (s.trace_id, s.span_id, s.parent_span_id, s.service, s.name, s.kind,
-             s.start_ns, s.end_ns, s.duration_ns, s.status, s.peer,
-             json.dumps(s.attrs, ensure_ascii=False), int(time.time()))
+            (
+                s.trace_id,
+                s.span_id,
+                s.parent_span_id,
+                s.service,
+                s.name,
+                s.kind,
+                s.start_ns,
+                s.end_ns,
+                s.duration_ns,
+                s.status,
+                s.peer,
+                json.dumps(s.attrs, ensure_ascii=False),
+                int(time.time()),
+            )
             for s in spans
         ]
         if not rows:
             return 0
         # COPY is roughly an order of magnitude faster than per-row INSERT for
         # OTLP batches, which arrive in bursts of hundreds of spans.
-        with self.conn.cursor() as cur:
-            with cur.copy(
+        with (
+            self.conn.cursor() as cur,
+            cur.copy(
                 "COPY spans (trace_id, span_id, parent_span_id, service, name, kind,"
                 " start_ns, end_ns, duration_ns, status, peer, attrs, received_at)"
                 " FROM STDIN"
-            ) as copy:
-                for row in rows:
-                    copy.write_row(row)
+            ) as copy,
+        ):
+            for row in rows:
+                copy.write_row(row)
         return len(rows)
 
     def edges(
@@ -93,17 +108,20 @@ class PostgresStore:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         with self.conn.cursor() as cur:
-            cur.execute(EDGES_SQL, {
-                "kind": kind,
-                "cutoff": int((time.time() - since_s) * 1e9),
-                "service": service,
-                "peer": peer,
-                "limit": limit,
-            })
+            cur.execute(
+                EDGES_SQL,
+                {
+                    "kind": kind,
+                    "cutoff": int((time.time() - since_s) * 1e9),
+                    "service": service,
+                    "peer": peer,
+                    "limit": limit,
+                },
+            )
             cols = [d.name for d in cur.description]
             rows = []
             for values in cur.fetchall():
-                item = dict(zip(cols, values))
+                item = dict(zip(cols, values, strict=False))
                 item["span"] = item.pop("name")
                 rows.append(item)
             return rows
@@ -137,5 +155,5 @@ class PostgresStore:
                 (trace_id,),
             )
             cols = [d.name for d in cur.description]
-            rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+            rows = [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
         return build_tree(rows)

@@ -31,17 +31,21 @@ def hex_id(n: int = 16) -> str:
 
 def otlp(spans: list[dict], service: str) -> dict:
     return {
-        "resourceSpans": [{
-            "resource": {"attributes": [
-                {"key": "service.name", "value": {"stringValue": service}}]},
-            "scopeSpans": [{"scope": {"name": "spanlens-demo"}, "spans": spans}],
-        }]
+        "resourceSpans": [
+            {
+                "resource": {
+                    "attributes": [{"key": "service.name", "value": {"stringValue": service}}]
+                },
+                "scopeSpans": [{"scope": {"name": "spanlens-demo"}, "spans": spans}],
+            }
+        ]
     }
 
 
 def post(payload: dict) -> None:
     req = urllib.request.Request(
-        SPANLENS, data=json.dumps(payload).encode(),
+        SPANLENS,
+        data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"},
     )
     urllib.request.urlopen(req, timeout=5).read()
@@ -50,10 +54,10 @@ def post(payload: dict) -> None:
 class Target(BaseHTTPRequestHandler):
     """Simulated payment API: 200 ms normally, 900 ms one call in four."""
 
-    def log_message(self, *a) -> None:  # noqa: A003
+    def log_message(self, *a) -> None:
         return
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         slow = random.random() < 0.25
         time.sleep(0.9 if slow else 0.2)
         code = 500 if random.random() < 0.05 else 200
@@ -78,7 +82,8 @@ def main(requests: int = 400) -> None:
         try:
             req = urllib.request.Request(
                 f"http://127.0.0.1:{port}/v1/payments",
-                data=b'{"amount":10}', headers={"Content-Type": "application/json"},
+                data=b'{"amount":10}',
+                headers={"Content-Type": "application/json"},
             )
             urllib.request.urlopen(req, timeout=5).read()
         except urllib.error.HTTPError:
@@ -86,9 +91,13 @@ def main(requests: int = 400) -> None:
         end = now_ns()
 
         client_span = {
-            "traceId": trace_id, "spanId": hex_id(), "parentSpanId": parent_id,
-            "name": "POST", "kind": 3,
-            "startTimeUnixNano": str(start), "endTimeUnixNano": str(end),
+            "traceId": trace_id,
+            "spanId": hex_id(),
+            "parentSpanId": parent_id,
+            "name": "POST",
+            "kind": 3,
+            "startTimeUnixNano": str(start),
+            "endTimeUnixNano": str(end),
             "status": {"code": 2 if error else 1},
             "attributes": [
                 {"key": "server.address", "value": {"stringValue": "payments.internal"}},
@@ -98,8 +107,11 @@ def main(requests: int = 400) -> None:
             ],
         }
         parent = {
-            "traceId": trace_id, "spanId": parent_id, "parentSpanId": "",
-            "name": "POST /checkout", "kind": 2,
+            "traceId": trace_id,
+            "spanId": parent_id,
+            "parentSpanId": "",
+            "name": "POST /checkout",
+            "kind": 2,
             "startTimeUnixNano": str(start - 3_000_000),
             "endTimeUnixNano": str(end + 2_000_000),
             "status": {"code": 2 if error else 1},

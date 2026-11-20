@@ -38,8 +38,7 @@ def parse_otlp_protobuf(body: bytes) -> list[Span]:
     """Decode an ExportTraceServiceRequest into the internal span model."""
     if ExportTraceServiceRequest is None:
         raise RuntimeError(
-            "protobuf ingest requires the 'opentelemetry-proto' package: "
-            "pip install spanlens[otlp]"
+            "protobuf ingest requires the 'opentelemetry-proto' package: pip install spanlens[otlp]"
         )
     request = ExportTraceServiceRequest()
     request.ParseFromString(body)

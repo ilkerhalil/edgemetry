@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .model import Span, build_tree
 
@@ -68,9 +69,19 @@ class Store:
         now = int(time.time())
         rows = [
             (
-                s.trace_id, s.span_id, s.parent_span_id, s.service, s.name, s.kind,
-                s.start_ns, s.end_ns, s.duration_ns, s.status, s.peer,
-                json.dumps(s.attrs, ensure_ascii=False), now,
+                s.trace_id,
+                s.span_id,
+                s.parent_span_id,
+                s.service,
+                s.name,
+                s.kind,
+                s.start_ns,
+                s.end_ns,
+                s.duration_ns,
+                s.status,
+                s.peer,
+                json.dumps(s.attrs, ensure_ascii=False),
+                now,
             )
             for s in spans
         ]
@@ -125,17 +136,19 @@ class Store:
         for (svc, pr, name), b in buckets.items():
             durations = b["durations"]
             total = b["total"]
-            out.append({
-                "service": svc,
-                "peer": pr,
-                "span": name,
-                "count": total,
-                "error_rate": round(b["errors"] / total * 100, 2) if total else 0.0,
-                "p50_ms": round(percentile(durations, 50) / 1e6, 2),
-                "p95_ms": round(percentile(durations, 95) / 1e6, 2),
-                "p99_ms": round(percentile(durations, 99) / 1e6, 2),
-                "max_ms": round(max(durations) / 1e6, 2),
-            })
+            out.append(
+                {
+                    "service": svc,
+                    "peer": pr,
+                    "span": name,
+                    "count": total,
+                    "error_rate": round(b["errors"] / total * 100, 2) if total else 0.0,
+                    "p50_ms": round(percentile(durations, 50) / 1e6, 2),
+                    "p95_ms": round(percentile(durations, 95) / 1e6, 2),
+                    "p99_ms": round(percentile(durations, 99) / 1e6, 2),
+                    "max_ms": round(max(durations) / 1e6, 2),
+                }
+            )
         out.sort(key=lambda r: r["p95_ms"], reverse=True)
         return out[:limit]
 
@@ -159,14 +172,16 @@ class Store:
                 "client_spans": r["total"],
                 "missing_peer": r["missing"] or 0,
                 "coverage_pct": round(100 * (1 - (r["missing"] or 0) / r["total"]), 1)
-                if r["total"] else 0.0,
+                if r["total"]
+                else 0.0,
             }
             for r in rows
         ]
 
     def trace(self, trace_id: str) -> list[dict[str, Any]]:
         rows = [
-            dict(r) for r in self.conn.execute(
+            dict(r)
+            for r in self.conn.execute(
                 "SELECT span_id, parent_span_id, service, name, kind, peer,"
                 " duration_ns, start_ns, status FROM spans"
                 " WHERE trace_id = ? ORDER BY start_ns",

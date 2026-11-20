@@ -90,9 +90,7 @@ def _to_int(value: Any) -> int:
 def parse_otlp_json(payload: dict[str, Any]) -> list[Span]:
     spans: list[Span] = []
     for resource_span in payload.get("resourceSpans", []):
-        resource_attrs = flat_attributes(
-            (resource_span.get("resource") or {}).get("attributes")
-        )
+        resource_attrs = flat_attributes((resource_span.get("resource") or {}).get("attributes"))
         service = service_name(resource_attrs)
         for scope_span in resource_span.get("scopeSpans", []):
             for raw in scope_span.get("spans", []):

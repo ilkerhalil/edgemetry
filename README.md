@@ -132,8 +132,18 @@ because the CPU has no AVX2. On normal server hardware they remain the better lo
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests -q
+.venv/bin/python -m pytest -q                       # unit + HTTP integration
+SPANLENS_TEST_DSN=postgresql://... .venv/bin/python -m pytest -q   # adds the Postgres suite
 ```
 
-Eight tests cover the nearest-rank percentile, nanosecond parsing, peer extraction, protobuf decoding,
-error rate, edge grouping, peer coverage and self-time computation.
+49 tests, 91 % coverage: unit tests cover percentile arithmetic, OTLP decoding in both encodings,
+peer extraction, aggregation and the CLI; integration tests drive a real HTTP server and, when a DSN
+is present, a real PostgreSQL database.
+
+## Documentation
+
+- `docs/architecture.md` — data flow, module map, decisions and what is deliberately missing
+- `docs/api.md` — endpoints, parameters, response shapes, error codes
+- `docs/deployment.md` — systemd unit, PostgreSQL setup, collector wiring, capacity notes
+- `CONTRIBUTING.md` — setup, checks, conventions
+- `CHANGELOG.md` — release history

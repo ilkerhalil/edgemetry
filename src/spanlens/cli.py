@@ -42,9 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     p_query.add_argument("--kind", default="client")
     p_query.add_argument("--limit", type=int, default=20)
 
-    p_verify = sub.add_parser(
-        "verify", help="check that client spans carry a callee identifier"
-    )
+    p_verify = sub.add_parser("verify", help="check that client spans carry a callee identifier")
     add_store_args(p_verify)
     p_verify.add_argument("--since", type=int, default=3600)
 
@@ -79,8 +77,10 @@ def main(argv: list[str] | None = None) -> int:
                 )
             print()
             if bad:
-                print(f"{bad} service(s) below 95% coverage: no callee on the span, "
-                      "so per-endpoint latency cannot be computed")
+                print(
+                    f"{bad} service(s) below 95% coverage: no callee on the span, "
+                    "so per-endpoint latency cannot be computed"
+                )
                 return 2
             print("all services above 95% coverage")
             return 0
