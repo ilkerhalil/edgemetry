@@ -9,6 +9,7 @@ picture.
 from __future__ import annotations
 
 import json
+import os
 import random
 import threading
 import time
@@ -16,7 +17,7 @@ import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SPANLENS = "http://127.0.0.1:4318/v1/traces"
+SPANLENS = os.environ.get("SPANLENS_URL", "http://127.0.0.1:4318/v1/traces")
 random.seed(7)
 
 

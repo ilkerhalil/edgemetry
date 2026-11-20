@@ -3,9 +3,9 @@
 Answer one question that classic APM tooling often cannot: **how long did our outbound call to a
 specific endpoint actually take, and how is that trending?**
 
-SpanLens receives OpenTelemetry spans over OTLP/HTTP, stores them, and answers latency questions at
-the span level — per caller service, per callee address, per operation, with p50/p95/p99 and error
-rate. It sits next to an existing APM, not instead of it: the APM keeps alerting on services, SpanLens
+SpanLens receives OpenTelemetry spans over OTLP, stores them, and answers latency questions at the
+span level — per caller service, per callee address, per operation, with p50/p95/p99 and error rate.
+It sits next to an existing APM, not instead of it: the APM keeps alerting on services, SpanLens
 answers "the call to `payments.internal:8443` is 900 ms at p95" when the metrics-only UI cannot.
 
 ## Why
@@ -20,7 +20,8 @@ SpanLens stores the spans and runs the aggregation.
 ## Quickstart
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -e .
+python -m venv .venv
+.venv/bin/pip install -e ".[otlp,postgres]"   # drop the extras for a JSON-only, SQLite-only run
 
 # receiver + query API
 PYTHONPATH=src .venv/bin/python -m spanlens.cli serve --db spans.db --port 4318
@@ -47,23 +48,70 @@ The ground truth is 200/900 ms and 5 % errors; the measured percentiles match it
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/v1/traces` | OTLP/HTTP JSON export, the standard collector endpoint |
+| POST | `/v1/traces` | OTLP/HTTP export — protobuf and JSON both accepted |
 | GET | `/v1/edges?since=3600&service=gateway&kind=client` | latency per caller → callee edge |
 | GET | `/v1/traces/{trace_id}` | waterfall with computed self time |
 | GET | `/health` | liveness |
 
+Content type decides the decoder: `application/x-protobuf` uses the official OTLP generated classes,
+anything else is parsed as OTLP/JSON. A deployment without `opentelemetry-proto` installed answers
+`415` on protobuf instead of failing silently.
+
 ## Sending real traces
 
-Point an OpenTelemetry Collector at SpanLens with the JSON encoder:
+Native protobuf, no encoder flag needed:
 
 ```yaml
 exporters:
   otlphttp/spanlens:
     traces_endpoint: http://spanlens:4318/v1/traces
-    encoding: json
 ```
 
-`encoding: json` is required in v0.1 — protobuf ingest is the next milestone.
+## Running next to Dynatrace
+
+`deploy/otel-collector-dynatrace.yaml` exports every span twice: unchanged to Dynatrace, and to
+SpanLens. Nothing in the application changes, and the Dynatrace path keeps its own sampling and
+billing.
+
+After wiring it, check that the spans actually carry a callee:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m spanlens.cli verify --since 3600
+```
+
+```
+service                   client spans  missing peer   coverage
+---------------------------------------------------------------
+gateway                            400             0     100.0%
+legacy-api                          60            60       0.0%
+
+1 service(s) below 95% coverage: no callee on the span, so per-endpoint latency cannot be computed
+```
+
+Exit code 2 means broken instrumentation — a client span without a peer cannot answer "which remote
+endpoint is slow", and no amount of querying fixes that. The collector config normalises
+`server.address`, `peer.service` and `net.peer.name` into one attribute before export.
+
+## Storage backends
+
+| Backend | Flag | Percentiles | Use |
+|---|---|---|---|
+| SQLite | `--db spans.db` | computed in Python | single node, pilot, zero setup |
+| PostgreSQL | `--backend postgres --dsn ...` | `percentile_cont` in the database | the scale path |
+
+Measured on 100 000 client spans, same aggregate query, this machine:
+
+```
+sqlite      100000 span  yazma   1.76s  sorgu medyan   628.1 ms
+postgres    100000 span  yazma   1.98s  sorgu medyan   191.7 ms
+```
+
+Postgres answers 3.3× faster because the percentile is computed next to the data instead of pulling
+every duration into the process. Ingest uses `COPY`, which is what keeps write time level with SQLite.
+
+**ClickHouse and DuckDB were tried and do not run on this host**: both crash with `Illegal instruction`
+because the CPU has no AVX2. On normal server hardware they remain the better long-term store; the
+`Store` interface is deliberately narrow so swapping one in touches no query code.
 
 ## Design notes
 
@@ -76,10 +124,10 @@ exporters:
 
 ## Limits of v0.1
 
-- SQLite storage, one process, single node. Fine for a pilot; ClickHouse is the scale path.
-- OTLP/HTTP JSON only. Standard SDKs default to protobuf, so the collector must set `encoding: json`.
-- Percentiles are computed in the application after a bounded row scan, not in the database.
-- No retention policy yet — the demo database grows forever.
+- Single node, one process. No retention policy — the database grows forever.
+- No authentication on the receiver. Put it behind the collector's network boundary.
+- No histogram or time-series rollups yet; every query scans the window.
+- `verify` checks one attribute family; it does not validate OTLP conformance.
 
 ## Tests
 
@@ -87,5 +135,5 @@ exporters:
 .venv/bin/python -m pytest tests -q
 ```
 
-Six tests cover the nearest-rank percentile, nanosecond parsing, peer extraction, error rate,
-edge grouping and self-time computation.
+Eight tests cover the nearest-rank percentile, nanosecond parsing, peer extraction, protobuf decoding,
+error rate, edge grouping, peer coverage and self-time computation.

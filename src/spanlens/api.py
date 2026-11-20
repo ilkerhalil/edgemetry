@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .model import parse_otlp_json
+from .otlp_proto import parse_otlp_protobuf, protobuf_available
 from .store import Store
 
 
@@ -36,12 +37,22 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "not found"})
             return
         length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length) or b"{}"
+        content_type = (self.headers.get("Content-Type") or "").lower()
         try:
-            payload = json.loads(self.rfile.read(length) or b"{}")
+            if "protobuf" in content_type or "octet-stream" in content_type:
+                if not protobuf_available():
+                    self._send(415, {"error": "protobuf ingest unavailable: pip install spanlens[otlp]"})
+                    return
+                spans = parse_otlp_protobuf(body)
+            else:
+                spans = parse_otlp_json(json.loads(body))
         except json.JSONDecodeError as exc:
             self._send(400, {"error": f"invalid json: {exc}"})
             return
-        spans = parse_otlp_json(payload)
+        except Exception as exc:  # noqa: BLE001
+            self._send(400, {"error": f"decode failed: {exc}"})
+            return
         accepted = self.store.insert(spans)
         self._send(200, {"accepted": accepted})
 
@@ -72,10 +83,10 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, {"error": "not found"})
 
 
-def serve(db_path: str, host: str = "127.0.0.1", port: int = 4318) -> None:
-    handler = type("BoundHandler", (Handler,), {"store": Store(db_path)})
+def serve(store, host: str = "127.0.0.1", port: int = 4318) -> None:
+    handler = type("BoundHandler", (Handler,), {"store": store})
     server = ThreadingHTTPServer((host, port), handler)
-    print(f"spanlens listening on http://{host}:{port}  db={db_path}")
+    print(f"spanlens listening on http://{host}:{port}  store={type(store).__name__}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

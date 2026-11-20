@@ -1,12 +1,14 @@
 [project]
 name = "spanlens"
-version = "0.1.0"
+version = "0.2.0"
 description = "Span-level latency store for OpenTelemetry traces"
 requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+otlp = ["opentelemetry-proto>=1.20"]
+postgres = ["psycopg[binary]>=3.1"]
+dev = ["pytest>=8", "opentelemetry-proto>=1.20", "psycopg[binary]>=3.1"]
 
 [project.scripts]
 spanlens = "spanlens.cli:main"

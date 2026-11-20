@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
-from .model import Span
+from .model import Span, build_tree
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS spans (
@@ -139,29 +139,38 @@ class Store:
         out.sort(key=lambda r: r["p95_ms"], reverse=True)
         return out[:limit]
 
-    def trace(self, trace_id: str) -> list[dict[str, Any]]:
-        rows = list(self.conn.execute(
-            "SELECT * FROM spans WHERE trace_id = ? ORDER BY start_ns", (trace_id,)
-        ))
-        children: dict[str, list[sqlite3.Row]] = {}
-        for row in rows:
-            children.setdefault(row["parent_span_id"], []).append(row)
+    def peer_coverage(self, since_s: int = 3600) -> list[dict[str, Any]]:
+        """Share of client spans that carry a callee identifier.
 
-        def build(row: sqlite3.Row) -> dict[str, Any]:
-            kids = [build(k) for k in children.get(row["span_id"], [])]
-            child_ns = sum(k["duration_ns"] for k in kids)
-            return {
-                "span_id": row["span_id"],
-                "parent_span_id": row["parent_span_id"],
-                "service": row["service"],
-                "name": row["name"],
-                "kind": row["kind"],
-                "peer": row["peer"],
-                "duration_ns": row["duration_ns"],
-                "start_ns": row["start_ns"],
-                "self_ns": max(row["duration_ns"] - child_ns, 0),
-                "status": row["status"],
-                "children": kids,
+        A client span without a peer cannot answer "which remote endpoint is slow",
+        so this is the first thing to check after wiring a collector.
+        """
+        cutoff = int((time.time() - since_s) * 1e9)
+        rows = self.conn.execute(
+            "SELECT service, count(*) AS total,"
+            " sum(CASE WHEN peer = '' THEN 1 ELSE 0 END) AS missing"
+            " FROM spans WHERE kind = 'client' AND start_ns >= ?"
+            " GROUP BY service ORDER BY total DESC",
+            (cutoff,),
+        ).fetchall()
+        return [
+            {
+                "service": r["service"],
+                "client_spans": r["total"],
+                "missing_peer": r["missing"] or 0,
+                "coverage_pct": round(100 * (1 - (r["missing"] or 0) / r["total"]), 1)
+                if r["total"] else 0.0,
             }
+            for r in rows
+        ]
 
-        return [build(r) for r in children.get("", [])]
+    def trace(self, trace_id: str) -> list[dict[str, Any]]:
+        rows = [
+            dict(r) for r in self.conn.execute(
+                "SELECT span_id, parent_span_id, service, name, kind, peer,"
+                " duration_ns, start_ns, status FROM spans"
+                " WHERE trace_id = ? ORDER BY start_ns",
+                (trace_id,),
+            )
+        ]
+        return build_tree(rows)

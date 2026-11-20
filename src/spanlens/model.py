@@ -21,7 +21,14 @@ KINDS = {
 STATUS = {0: "unset", 1: "ok", 2: "error"}
 
 # Attribute keys that identify the callee of a client span, in priority order.
-PEER_KEYS = ("server.address", "peer.service", "net.peer.name", "db.system", "rpc.service")
+PEER_KEYS = (
+    "spanlens.peer",
+    "server.address",
+    "peer.service",
+    "net.peer.name",
+    "db.system",
+    "rpc.service",
+)
 
 
 @dataclass(slots=True)
@@ -106,3 +113,20 @@ def parse_otlp_json(payload: dict[str, Any]) -> list[Span]:
                     )
                 )
     return spans
+
+
+def build_tree(rows: list[dict]) -> list[dict]:
+    """Turn a flat span list into a waterfall with computed self time."""
+    children: dict[str, list[dict]] = {}
+    for row in rows:
+        children.setdefault(row.get("parent_span_id", ""), []).append(row)
+
+    def build(node: dict) -> dict:
+        kids = [build(k) for k in children.get(node["span_id"], [])]
+        child_ns = sum(k["duration_ns"] for k in kids)
+        out = dict(node)
+        out["self_ns"] = max(node["duration_ns"] - child_ns, 0)
+        out["children"] = kids
+        return out
+
+    return [build(r) for r in children.get("", [])]
