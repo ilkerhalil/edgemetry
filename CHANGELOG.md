@@ -11,6 +11,7 @@ All notable changes are recorded here. Format follows Keep a Changelog; versions
 
 ### Added
 
+- Published to PyPI as `edgemetry` 0.3.0 (wheel and sdist).
 - Bearer-token authentication on ingest and queries (`--token` / `$EDGEMETRY_TOKEN`); `/health` stays
   public. The startup line reports `auth=bearer token` or `auth=NO AUTH`.
 - Retention: `--retention 7d` prunes at start and every six hours, plus `edgemetry prune

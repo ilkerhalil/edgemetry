@@ -1,5 +1,9 @@
 # Edgemetry
 
+[![PyPI](https://img.shields.io/pypi/v/edgemetry.svg)](https://pypi.org/project/edgemetry/)
+[![CI](https://github.com/ilkerhalil/edgemetry/actions/workflows/ci.yml/badge.svg)](https://github.com/ilkerhalil/edgemetry/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Answer one question that classic APM tooling often cannot: **how long did our outbound call to a
 specific endpoint actually take, and how is that trending?**
 
@@ -17,21 +21,27 @@ timing, but many managed APM editions expose only trace-by-id lookup — no aggr
 
 Edgemetry stores the spans and runs the aggregation.
 
+## Install
+
+```bash
+pip install "edgemetry[otlp,postgres]"   # drop the extras for a JSON-only, SQLite-only run
+```
+
+Verified from PyPI: `pip install "edgemetry[otlp]"` into a clean venv installs 0.3.0 and
+`edgemetry --help` lists `serve`, `query`, `verify`, `trace`, `prune`.
+
 ## Quickstart
 
 ```bash
-python -m venv .venv
-.venv/bin/pip install -e ".[otlp,postgres]"   # drop the extras for a JSON-only, SQLite-only run
-
 # receiver + query API
 export EDGEMETRY_TOKEN="$(openssl rand -hex 24)"
-PYTHONPATH=src .venv/bin/python -m edgemetry.cli serve --db spans.db --port 4318 --retention 7d
+edgemetry serve --db spans.db --port 4318 --retention 7d
 
 # in another shell: emit demo traffic with known latency
-PYTHONPATH=src .venv/bin/python demo/emit_demo.py
+PYTHONPATH=src python demo/emit_demo.py     # from a checkout; the package ships no demo
 
 # aggregate query
-PYTHONPATH=src .venv/bin/python -m edgemetry.cli query --db spans.db --since 3600
+edgemetry query --db spans.db --since 3600
 ```
 
 Output from a real run of the demo (400 calls, target sleeps 200 ms normally and 900 ms one call in
